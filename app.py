@@ -11,9 +11,9 @@ st.set_page_config(
 # -------------------- Header --------------------
 st.markdown(
     """
-    <h1 style="margin-bottom:0;">DS413 Phase II – Air Pollution Dashboard</h1>
+    <h1 style="margin-bottom:0;">DS413 Phase II – Air Pollution Visualization Dashboard</h1>
     <p style="color: #555; font-size: 15px; margin-top:4px;">
-    Interactive dashboard to explore PM2.5 air pollution levels across countries and years (2017–2023).
+    This interactive dashboard visualizes PM2.5 air pollution levels for cities and countries between 2017–2023.
     </p>
     """,
     unsafe_allow_html=True
@@ -31,8 +31,24 @@ year_cols = df.columns[2:]
 for col in year_cols:
     df[col] = pd.to_numeric(df[col], errors="coerce")
 
+# Clean country names
+df["country"] = df["country"].astype(str).str.strip()
+
+# Pre-compute overall country averages across 2017–2023
+country_means_all = df.groupby("country")[year_cols].mean()
+country_means_all["overall_mean"] = country_means_all.mean(axis=1)
+
+highest_country = country_means_all["overall_mean"].idxmax()
+highest_value = country_means_all["overall_mean"].max()
+
+lowest_country = country_means_all["overall_mean"].idxmin()
+lowest_value = country_means_all["overall_mean"].min()
+
+overall_global_mean = df[year_cols].stack().mean()
+total_cities = df["city"].nunique()
+
 # -------------------- Sidebar filters --------------------
-st.sidebar.title("Controls")
+st.sidebar.title("Filters")
 
 st.sidebar.markdown(
     "Use the filters below to explore air pollution patterns "
@@ -56,25 +72,25 @@ show_data = st.sidebar.checkbox("Show raw data for selected year", value=False)
 # -------------------- KPI section --------------------
 kpi_container = st.container()
 with kpi_container:
-    col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-
-    global_mean = df[selected_year].mean()
-    max_country_row = df.groupby("country")[selected_year].mean().idxmax()
-    max_country_value = df.groupby("country")[selected_year].mean().max()
-    num_cities = df[df[selected_year].notna()]["city"].nunique()
+    col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
 
     col_kpi1.metric(
-        label=f"Global average PM2.5 in {selected_year}",
-        value=f"{global_mean:.2f}"
+        label="Highest avg PM2.5 (2017–2023)",
+        value=highest_country,
+        delta=f"{highest_value:.1f}"
     )
     col_kpi2.metric(
-        label=f"Most polluted country in {selected_year}",
-        value=max_country_row,
-        delta=f"{max_country_value:.1f}"
+        label="Lowest avg PM2.5 (2017–2023)",
+        value=lowest_country,
+        delta=f"{lowest_value:.1f}"
     )
     col_kpi3.metric(
         label="Number of cities with data",
-        value=int(num_cities)
+        value=int(total_cities)
+    )
+    col_kpi4.metric(
+        label="Overall global avg PM2.5 (2017–2023)",
+        value=f"{overall_global_mean:.2f}"
     )
 
 st.markdown("---")
