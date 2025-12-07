@@ -24,14 +24,14 @@ st.markdown(
 def load_data():
     df = pd.read_csv("air_pollution new.csv")
 
-    # Identify year columns (e.g., '2017', '2018', ..., '2023')
+    # Year columns (e.g., 2017–2023)
     year_cols = [c for c in df.columns if c.isdigit()]
 
     # Convert to numeric
     for col in year_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Replace 0 with NaN (treat 0 as missing / no data)
+    # Treat 0 as missing / no data
     df[year_cols] = df[year_cols].replace(0, np.nan)
 
     # Long format for plotting
@@ -65,11 +65,8 @@ selected_country = st.sidebar.selectbox(
     options=["All"] + countries
 )
 
-# ----------------------------------------------
-# Select city depending on selected country
-# The 'key' below forces Streamlit to reload the city widget whenever the country changes.
-# Without this key, the dropdown may appear frozen and not update correctly.
-# ----------------------------------------------
+# City list depends on selected country
+# The 'key' forces Streamlit to reload the widget when country changes
 if selected_country == "All":
     city_options = sorted(df["city"].unique())
 else:
@@ -78,21 +75,25 @@ else:
 selected_city = st.sidebar.selectbox(
     "Select city (optional):",
     options=["All"] + city_options,
-    key=f"city_{selected_country}"  # dynamic key refreshes the list when country changes
+    key=f"city_{selected_country}"
 )
 
 # =========================
-# Filtered data (country + city) – main filter used everywhere
+# Filtered data
 # =========================
-df_filtered = df.copy()
+# 1) Country-level filter (used in OVERVIEW only)
+df_country_filtered = df.copy()
+df_long_country_filtered = df_long.copy()
 
 if selected_country != "All":
-    df_filtered = df_filtered[df_filtered["country"] == selected_country]
+    df_country_filtered = df_country_filtered[df_country_filtered["country"] == selected_country]
+    df_long_country_filtered = df_long_country_filtered[df_long_country_filtered["country"] == selected_country]
 
+# 2) Country + city filter (used in ANALYSIS + RAW DATA)
+df_filtered = df_country_filtered.copy()
 if selected_city != "All":
     df_filtered = df_filtered[df_filtered["city"] == selected_city]
 
-# Long version for filtered data
 df_long_filtered = df_long.merge(
     df_filtered[["city", "country"]],
     on=["city", "country"],
@@ -105,17 +106,16 @@ df_long_filtered = df_long.merge(
 tab1, tab2, tab3 = st.tabs(["Overview", "Analysis", "Raw Data"])
 
 # =========================
-# Tab 1: Overview (now reacts to filters)
+# Tab 1: Overview  (country-level only)
 # =========================
 with tab1:
     st.subheader("Overview")
 
-    # ----- KPIs -----
-    # If there is filtered data, use it; otherwise fallback to global
-    if not df_long_filtered.empty:
-        kpi_source = df_long_filtered
-    else:
+    # ----- KPIs (always country-level; ignore city) -----
+    if selected_country == "All":
         kpi_source = df_long
+    else:
+        kpi_source = df_long_country_filtered
 
     country_mean_all_years = (
         kpi_source.groupby("country")["pm25"].mean().dropna().sort_values(ascending=False)
@@ -126,27 +126,23 @@ with tab1:
         highest_value = country_mean_all_years.max()
         lowest_country = country_mean_all_years.idxmin()
         lowest_value = country_mean_all_years.min()
-        global_mean = country_mean_all_years.mean()
+        mean_pm = country_mean_all_years.mean()
         num_countries = country_mean_all_years.index.nunique()
     else:
         highest_country = lowest_country = "N/A"
-        highest_value = lowest_value = global_mean = 0.0
+        highest_value = lowest_value = mean_pm = 0.0
         num_countries = 0
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Highest average PM2.5 (country)", f"{highest_country}", f"{highest_value:.1f}")
     col2.metric("Lowest average PM2.5 (country)", f"{lowest_country}", f"{lowest_value:.1f}")
     col3.metric("Number of countries", f"{num_countries}")
-    col4.metric("Mean PM2.5 (selected scope)", f"{global_mean:.1f}")
+    col4.metric("Mean PM2.5 (scope)", f"{mean_pm:.1f}")
 
-    # ----- Global / filtered trend -----
+    # ----- Trend over time (country scope, ignore city) -----
     st.markdown("#### PM2.5 trend over time")
 
-    if not df_long_filtered.empty:
-        trend_source = df_long_filtered
-    else:
-        trend_source = df_long
-
+    trend_source = kpi_source  # same scope as KPIs
     global_trend = (
         trend_source.groupby("year")["pm25"]
         .mean()
@@ -164,15 +160,15 @@ with tab1:
         )
         st.plotly_chart(fig_line, use_container_width=True)
     else:
-        st.info("No data available to display the trend for the current filters.")
+        st.info("No data available to display the trend for the current selection.")
 
-    # ----- Choropleth map: uses filtered data if available -----
+    # ----- Choropleth map (world or selected country only) -----
     st.markdown(f"#### Country-level PM2.5 in {selected_year}")
 
-    if not df_filtered.empty:
-        map_source = df_filtered
-    else:
+    if selected_country == "All":
         map_source = df
+    else:
+        map_source = df_country_filtered
 
     country_year = (
         map_source.groupby("country")[selected_year]
@@ -195,9 +191,9 @@ with tab1:
         fig_map.update_layout(margin=dict(l=0, r=0, t=50, b=0))
         st.plotly_chart(fig_map, use_container_width=True)
     else:
-        st.info("No country data available for the selected filters.")
+        st.info("No country data available for the current selection.")
 
-    # ----- Top 10 countries bar chart -----
+    # ----- Top 10 countries bar chart (within current country scope) -----
     st.markdown(f"#### Top 10 countries by PM2.5 in {selected_year}")
 
     top10 = country_year.sort_values("pm25", ascending=False).head(10)
@@ -212,10 +208,10 @@ with tab1:
         fig_bar.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig_bar, use_container_width=True)
     else:
-        st.info("No data available to display the top 10 countries for the current filters.")
+        st.info("No data available to display the top 10 countries for the current selection.")
 
 # =========================
-# Tab 2: Analysis (4 plots in 2×2 grid)
+# Tab 2: Analysis (uses country + city filters)
 # =========================
 with tab2:
     st.subheader("Detailed Analysis")
@@ -243,7 +239,7 @@ with tab2:
         st.markdown("##### Country PM2.5: 2019 vs 2023 (filtered by country)")
         if "2019" in year_cols and "2023" in year_cols:
             scatter_df = (
-                df_filtered.groupby("country")[["2019", "2023"]]
+                df_country_filtered.groupby("country")[["2019", "2023"]]
                 .mean()
                 .reset_index()
                 .dropna()
@@ -264,7 +260,7 @@ with tab2:
 
     colC, colD = st.columns(2)
 
-    # 3) Trend for selected filters
+    # 3) Trend for selected country/city
     with colC:
         st.markdown("##### PM2.5 trend for selected filters")
         if not df_long_filtered.empty:
