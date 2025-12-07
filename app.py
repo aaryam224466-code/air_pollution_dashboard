@@ -81,7 +81,7 @@ selected_city = st.sidebar.selectbox(
 # =========================
 # Filtered data
 # =========================
-# 1) Country-level filter (used in OVERVIEW only)
+# 1) Country-level filter
 df_country_filtered = df.copy()
 df_long_country_filtered = df_long.copy()
 
@@ -89,7 +89,7 @@ if selected_country != "All":
     df_country_filtered = df_country_filtered[df_country_filtered["country"] == selected_country]
     df_long_country_filtered = df_long_country_filtered[df_long_country_filtered["country"] == selected_country]
 
-# 2) Country + city filter (used in ANALYSIS + RAW DATA)
+# 2) Country + city filter
 df_filtered = df_country_filtered.copy()
 if selected_city != "All":
     df_filtered = df_filtered[df_filtered["city"] == selected_city]
@@ -106,43 +106,69 @@ df_long_filtered = df_long.merge(
 tab1, tab2, tab3 = st.tabs(["Overview", "Analysis", "Raw Data"])
 
 # =========================
-# Tab 1: Overview  (country-level only)
+# Tab 1: Overview
 # =========================
 with tab1:
     st.subheader("Overview")
 
-    # ----- KPIs (always country-level; ignore city) -----
-    if selected_country == "All":
-        kpi_source = df_long
+    # ---------------------------------------
+    # KPIs:
+    #   - If a city is selected → work at CITY level
+    #   - Else               → work at COUNTRY level
+    # ---------------------------------------
+    if selected_city != "All":
+        # City-level scope
+        kpi_source = df_long_filtered
+        group_col = "city"
+        entity_label = "city"
+        entity_plural = "cities"
     else:
-        kpi_source = df_long_country_filtered
+        # Country-level scope (global or specific country)
+        if selected_country == "All":
+            kpi_source = df_long
+        else:
+            kpi_source = df_long_country_filtered
+        group_col = "country"
+        entity_label = "country"
+        entity_plural = "countries"
 
-    country_mean_all_years = (
-        kpi_source.groupby("country")["pm25"].mean().dropna().sort_values(ascending=False)
+    kpi_group = (
+        kpi_source.groupby(group_col)["pm25"]
+        .mean()
+        .dropna()
+        .sort_values(ascending=False)
     )
 
-    if not country_mean_all_years.empty:
-        highest_country = country_mean_all_years.idxmax()
-        highest_value = country_mean_all_years.max()
-        lowest_country = country_mean_all_years.idxmin()
-        lowest_value = country_mean_all_years.min()
-        mean_pm = country_mean_all_years.mean()
-        num_countries = country_mean_all_years.index.nunique()
+    if not kpi_group.empty:
+        highest_entity = kpi_group.idxmax()
+        highest_value = kpi_group.max()
+        lowest_entity = kpi_group.idxmin()
+        lowest_value = kpi_group.min()
+        mean_pm = kpi_group.mean()
+        num_entities = kpi_group.index.nunique()
     else:
-        highest_country = lowest_country = "N/A"
+        highest_entity = lowest_entity = "N/A"
         highest_value = lowest_value = mean_pm = 0.0
-        num_countries = 0
+        num_entities = 0
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Highest average PM2.5 (country)", f"{highest_country}", f"{highest_value:.1f}")
-    col2.metric("Lowest average PM2.5 (country)", f"{lowest_country}", f"{lowest_value:.1f}")
-    col3.metric("Number of countries", f"{num_countries}")
+    col1.metric(
+        f"Highest average PM2.5 ({entity_label})",
+        f"{highest_entity}",
+        f"{highest_value:.1f}"
+    )
+    col2.metric(
+        f"Lowest average PM2.5 ({entity_label})",
+        f"{lowest_entity}",
+        f"{lowest_value:.1f}"
+    )
+    col3.metric(f"Number of {entity_plural}", f"{num_entities}")
     col4.metric("Mean PM2.5 (scope)", f"{mean_pm:.1f}")
 
-    # ----- Trend over time (country scope, ignore city) -----
+    # Trend over time for current scope (country or city)
     st.markdown("#### PM2.5 trend over time")
+    trend_source = kpi_source
 
-    trend_source = kpi_source  # same scope as KPIs
     global_trend = (
         trend_source.groupby("year")["pm25"]
         .mean()
@@ -162,9 +188,8 @@ with tab1:
     else:
         st.info("No data available to display the trend for the current selection.")
 
-    # ----- Choropleth map (world or selected country only) -----
+    # Choropleth map (always country-level)
     st.markdown(f"#### Country-level PM2.5 in {selected_year}")
-
     if selected_country == "All":
         map_source = df
     else:
@@ -193,9 +218,8 @@ with tab1:
     else:
         st.info("No country data available for the current selection.")
 
-    # ----- Top 10 countries bar chart (within current country scope) -----
+    # Top 10 countries bar chart
     st.markdown(f"#### Top 10 countries by PM2.5 in {selected_year}")
-
     top10 = country_year.sort_values("pm25", ascending=False).head(10)
 
     if not top10.empty:
@@ -211,7 +235,7 @@ with tab1:
         st.info("No data available to display the top 10 countries for the current selection.")
 
 # =========================
-# Tab 2: Analysis (uses country + city filters)
+# Tab 2: Analysis (country + city filters)
 # =========================
 with tab2:
     st.subheader("Detailed Analysis")
@@ -234,7 +258,7 @@ with tab2:
         else:
             st.info("No data available for the current filters.")
 
-    # 2) Scatter plot 2019 vs 2023
+    # 2) Scatter 2019 vs 2023
     with colB:
         st.markdown("##### Country PM2.5: 2019 vs 2023 (filtered by country)")
         if "2019" in year_cols and "2023" in year_cols:
@@ -260,7 +284,7 @@ with tab2:
 
     colC, colD = st.columns(2)
 
-    # 3) Trend for selected country/city
+    # 3) Trend for selected filters
     with colC:
         st.markdown("##### PM2.5 trend for selected filters")
         if not df_long_filtered.empty:
