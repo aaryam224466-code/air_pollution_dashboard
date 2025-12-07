@@ -106,69 +106,63 @@ df_long_filtered = df_long.merge(
 tab1, tab2, tab3 = st.tabs(["Overview", "Analysis", "Raw Data"])
 
 # =========================
-# Tab 1: Overview
+# Tab 1: Overview  (KPIs = country-level, city shown separately)
 # =========================
 with tab1:
     st.subheader("Overview")
 
-    # ---------------------------------------
-    # KPIs:
-    #   - If a city is selected → work at CITY level
-    #   - Else               → work at COUNTRY level
-    # ---------------------------------------
-    if selected_city != "All":
-        # City-level scope
-        kpi_source = df_long_filtered
-        group_col = "city"
-        entity_label = "city"
-        entity_plural = "cities"
+    # ----- KPIs: always based on COUNTRIES -----
+    if selected_country == "All":
+        kpi_source = df_long   # global
     else:
-        # Country-level scope (global or specific country)
-        if selected_country == "All":
-            kpi_source = df_long
-        else:
-            kpi_source = df_long_country_filtered
-        group_col = "country"
-        entity_label = "country"
-        entity_plural = "countries"
+        kpi_source = df_long_country_filtered  # only selected country
 
-    kpi_group = (
-        kpi_source.groupby(group_col)["pm25"]
+    country_group = (
+        kpi_source.groupby("country")["pm25"]
         .mean()
         .dropna()
         .sort_values(ascending=False)
     )
 
-    if not kpi_group.empty:
-        highest_entity = kpi_group.idxmax()
-        highest_value = kpi_group.max()
-        lowest_entity = kpi_group.idxmin()
-        lowest_value = kpi_group.min()
-        mean_pm = kpi_group.mean()
-        num_entities = kpi_group.index.nunique()
+    if not country_group.empty:
+        highest_country = country_group.idxmax()
+        highest_value = country_group.max()
+        lowest_country = country_group.idxmin()
+        lowest_value = country_group.min()
+        mean_pm = country_group.mean()
+        num_countries = country_group.index.nunique()
     else:
-        highest_entity = lowest_entity = "N/A"
+        highest_country = lowest_country = "N/A"
         highest_value = lowest_value = mean_pm = 0.0
-        num_entities = 0
+        num_countries = 0
 
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(
-        f"Highest average PM2.5 ({entity_label})",
-        f"{highest_entity}",
-        f"{highest_value:.1f}"
-    )
-    col2.metric(
-        f"Lowest average PM2.5 ({entity_label})",
-        f"{lowest_entity}",
-        f"{lowest_value:.1f}"
-    )
-    col3.metric(f"Number of {entity_plural}", f"{num_entities}")
+    col1.metric("Highest average PM2.5 (country)", f"{highest_country}", f"{highest_value:.1f}")
+    col2.metric("Lowest average PM2.5 (country)", f"{lowest_country}", f"{lowest_value:.1f}")
+    col3.metric("Number of countries", f"{num_countries}")
     col4.metric("Mean PM2.5 (scope)", f"{mean_pm:.1f}")
 
-    # Trend over time for current scope (country or city)
-    st.markdown("#### PM2.5 trend over time")
-    trend_source = kpi_source
+    # ----- Extra info for selected city (if not All) -----
+    if selected_city != "All":
+        city_row = df[
+            (df["country"] == selected_country) &
+            (df["city"] == selected_city)
+        ]
 
+        city_value = city_row[selected_year].mean()
+
+        st.markdown("##### Selected city details")
+        c1, c2 = st.columns(2)
+        c1.metric("Selected city", selected_city)
+        if pd.notna(city_value):
+            c2.metric(f"{selected_year} PM2.5 (city)", f"{city_value:.1f}")
+        else:
+            c2.metric(f"{selected_year} PM2.5 (city)", "No data")
+
+    # ----- Trend over time for current COUNTRY scope -----
+    st.markdown("#### PM2.5 trend over time")
+
+    trend_source = kpi_source
     global_trend = (
         trend_source.groupby("year")["pm25"]
         .mean()
@@ -188,8 +182,9 @@ with tab1:
     else:
         st.info("No data available to display the trend for the current selection.")
 
-    # Choropleth map (always country-level)
+    # ----- Choropleth map -----
     st.markdown(f"#### Country-level PM2.5 in {selected_year}")
+
     if selected_country == "All":
         map_source = df
     else:
@@ -218,8 +213,9 @@ with tab1:
     else:
         st.info("No country data available for the current selection.")
 
-    # Top 10 countries bar chart
+    # ----- Top 10 countries bar chart -----
     st.markdown(f"#### Top 10 countries by PM2.5 in {selected_year}")
+
     top10 = country_year.sort_values("pm25", ascending=False).head(10)
 
     if not top10.empty:
