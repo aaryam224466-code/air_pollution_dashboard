@@ -17,6 +17,9 @@ st.markdown(
 # Load dataset
 df = pd.read_csv("air_pollution new.csv")
 
+# Clean country names (remove leading/trailing spaces if any)
+df["country"] = df["country"].astype(str).str.strip()
+
 # Convert yearly columns to numeric
 year_cols = df.columns[2:]
 for col in year_cols:
@@ -39,9 +42,13 @@ selected_country = st.sidebar.selectbox(
 # KPI section – quick summary metrics
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
+# Global average in selected year
 global_mean = df[selected_year].mean()
-max_country_row = df.groupby("country")[selected_year].mean().idxmax()
-max_country_value = df.groupby("country")[selected_year].mean().max()
+
+# Average for selected country in selected year
+selected_country_mean = df[df["country"] == selected_country][selected_year].mean()
+
+# Number of cities with data in selected year
 num_cities = df[df[selected_year].notna()]["city"].nunique()
 
 col_kpi1.metric(
@@ -49,9 +56,8 @@ col_kpi1.metric(
     value=f"{global_mean:.2f}"
 )
 col_kpi2.metric(
-    label=f"Most polluted country in {selected_year}",
-    value=max_country_row,
-    delta=f"{max_country_value:.1f}"
+    label=f"Average PM2.5 in {selected_country} ({selected_year})",
+    value=f"{selected_country_mean:.2f}"
 )
 col_kpi3.metric(
     label="Number of cities with data",
@@ -60,13 +66,10 @@ col_kpi3.metric(
 
 st.markdown("---")
 
-# Divider
-st.markdown("---")
-
 # Define custom color template
-color_theme = "Reds"  # يمكنك تغييره إلى "Blues" أو "Viridis"
+color_theme = "Reds"
 
-# Create two columns for the first row (Map + Bar)
+# First row (Map + Top 10)
 col1, col2 = st.columns(2)
 
 with col1:
@@ -98,7 +101,6 @@ with col2:
     fig_bar.update_layout(xaxis_tickangle=-45)
     st.plotly_chart(fig_bar, use_container_width=True)
 
-# Divider
 st.markdown("---")
 
 # Second row (Global Trend + Country Trend)
