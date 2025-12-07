@@ -24,6 +24,9 @@ st.markdown("---")
 # -------------------- Load and prepare data --------------------
 df = pd.read_csv("air_pollution new.csv")
 
+# Clean country names (remove extra spaces if any)
+df["country"] = df["country"].astype(str).str.strip()
+
 # Year columns start from the 3rd column (index 2)
 year_cols = df.columns[2:]
 
@@ -58,9 +61,13 @@ kpi_container = st.container()
 with kpi_container:
     col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
+    # Global average for the selected year
     global_mean = df[selected_year].mean()
-    max_country_row = df.groupby("country")[selected_year].mean().idxmax()
-    max_country_value = df.groupby("country")[selected_year].mean().max()
+
+    # Average value for the selected country and year
+    selected_country_mean = df[df["country"] == selected_country][selected_year].mean()
+
+    # Number of cities with data for the selected year
     num_cities = df[df[selected_year].notna()]["city"].nunique()
 
     col_kpi1.metric(
@@ -68,12 +75,11 @@ with kpi_container:
         value=f"{global_mean:.2f}"
     )
     col_kpi2.metric(
-        label=f"Most polluted country in {selected_year}",
-        value=max_country_row,
-        delta=f"{max_country_value:.1f}"
+        label=f"Average PM2.5 in {selected_country} ({selected_year})",
+        value=f"{selected_country_mean:.2f}"
     )
     col_kpi3.metric(
-        label="Number of cities with data",
+        label=f"Number of cities with data in {selected_year}",
         value=int(num_cities)
     )
 
