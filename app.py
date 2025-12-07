@@ -24,17 +24,17 @@ st.markdown(
 def load_data():
     df = pd.read_csv("air_pollution new.csv")
 
-    # 1) تحديد أعمدة السنوات
+    # Identify year columns
     year_cols = [c for c in df.columns if c.isdigit()]
 
-    # 2) تحويلها لقيم رقمية
+    # Convert to numeric
     for col in year_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # 3) استبدال الصفر بـ NaN (يعني لا توجد بيانات / not available)
+    # Replace 0 with NaN (treat missing or zero values as not available)
     df[year_cols] = df[year_cols].replace(0, np.nan)
 
-    # 4) تحويل لهيئة long لسهولة الرسم
+    # Convert to long format for easier plotting
     df_long = df.melt(
         id_vars=["city", "country"],
         value_vars=year_cols,
@@ -52,20 +52,24 @@ df, df_long, year_cols = load_data()
 # =========================
 st.sidebar.header("Filters")
 
-# اختيار سنة
+# Select year
 selected_year = st.sidebar.selectbox(
     "Select year:",
     options=sorted(year_cols)
 )
 
-# اختيار دولة
+# Select country
 countries = sorted(df["country"].unique())
 selected_country = st.sidebar.selectbox(
     "Select country:",
     options=["All"] + countries
 )
 
-# اختيار مدينة حسب الدولة المختارة
+# ----------------------------------------------
+# Select city depending on selected country
+# The 'key' below forces Streamlit to reload the city widget whenever the country changes.
+# Without this key, the dropdown may appear frozen and not update correctly.
+# ----------------------------------------------
 if selected_country == "All":
     city_options = sorted(df["city"].unique())
 else:
@@ -73,11 +77,12 @@ else:
 
 selected_city = st.sidebar.selectbox(
     "Select city (optional):",
-    options=["All"] + city_options
+    options=["All"] + city_options,
+    key=f"city_{selected_country}"  # dynamic key refreshes the list when country changes
 )
 
 # =========================
-# Filtered data (country / city only)
+# Filtered data
 # =========================
 df_filtered = df.copy()
 
@@ -87,7 +92,7 @@ if selected_country != "All":
 if selected_city != "All":
     df_filtered = df_filtered[df_filtered["city"] == selected_city]
 
-# نسخة long من البيانات بعد الفلترة
+# Long version for filtered data
 df_long_filtered = df_long.merge(
     df_filtered[["city", "country"]],
     on=["city", "country"],
@@ -105,7 +110,6 @@ tab1, tab2, tab3 = st.tabs(["Overview", "Analysis", "Raw Data"])
 with tab1:
     st.subheader("Global Overview")
 
-    # حساب متوسط PM2.5 لكل دولة عبر كل السنوات
     country_mean_all_years = (
         df_long.groupby("country")["pm25"].mean().dropna().sort_values(ascending=False)
     )
@@ -128,7 +132,7 @@ with tab1:
     col3.metric("Number of countries", f"{num_countries}")
     col4.metric("Global mean PM2.5", f"{global_mean:.1f}")
 
-    # Global trend line
+    # Global PM2.5 trend
     global_trend = (
         df_long.groupby("year")["pm25"]
         .mean()
@@ -197,10 +201,8 @@ with tab2:
 
     colA, colB = st.columns(2)
 
-    # Violin plot: distribution by year
     with colA:
         st.markdown("##### PM2.5 distribution by year")
-
         if not df_long_filtered.empty:
             fig_violin = px.violin(
                 df_long_filtered,
@@ -214,10 +216,8 @@ with tab2:
         else:
             st.info("No data available for the current filters.")
 
-    # Scatter plot: 2019 vs 2023
     with colB:
         st.markdown("##### Country PM2.5: 2019 vs 2023")
-
         if "2019" in year_cols and "2023" in year_cols:
             scatter_df = (
                 df.groupby("country")[["2019", "2023"]]
