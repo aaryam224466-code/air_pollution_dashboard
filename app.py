@@ -208,13 +208,4 @@ if show_data:
         .reset_index(drop=True)
     )
 
-# -------------------- Insights section --------------------
-st.markdown("### Insights")
-st.markdown(
-    """
-    - The choropleth map highlights how air pollution levels differ across countries in the selected year.
-    - The bar chart focuses on the top 10 most polluted countries for quicker comparison.
-    - The global trend line shows how average PM2.5 changed between 2017 and 2023.
-    - The country-specific trend allows a closer look at the behaviour of a single country over time.
-    """
-)
+
